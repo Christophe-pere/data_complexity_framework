@@ -3,6 +3,7 @@ Framework to determine the separation between the classical and quantum regimes 
 
 ## Module layout (Python package style)
 
+```
 data_complexity_framework/
 │
 ├── datasets/
@@ -26,5 +27,11 @@ data_complexity_framework/
 │
 ├── core.py            # orchestrates experiments, builds complexity cards
 └── demo_parity.py     # simple demo script
+```
+
 
 ---
+
+
+
+
