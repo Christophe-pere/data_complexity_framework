@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# OS
+.DS_Store
+
+# Regenerable dataset caches — the registry rebuilds these deterministically
+# from datasets/registry.json, and each carries its own SHA-256.
+datasets/qspin/*.h5
+
+# Large raw result files (~108 MB total). Deliberately excluded from the initial
+# commit: they are easy to add later, and hard to remove from history once in.
+# See "Data and code availability" in the paper — release these via Zenodo or
+# git-lfs, or drop these lines to track them directly.
+experiments/results/h1_gradients.jsonl
+experiments/results/h1_gradients_topofix.jsonl
+experiments/results/phase_b.jsonl
+experiments/results/phase_b_best_classical.jsonl
+experiments/results/phase_b_best_classical_topofix.jsonl
+
+# Build artifacts
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
+
+# Manuscript lives in a separate repository; this repo holds code only.
+# The paper is linked from the README once it is on arXiv.
+paper/
+paper.zip
+*.tex
+*.bbl
