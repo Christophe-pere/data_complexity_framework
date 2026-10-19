@@ -25,6 +25,12 @@ from .classical import (
     PersistentHomology,
 )
 from .quantum import (
+    EnsembleEntanglement,
+    EnsembleFubiniStudyPersistence,
+    EnsembleKernelEffectiveRank,
+    EnsembleQFI,
+    EnsembleStabilizerMagic,
+    EnsembleTotalCorrelation,
     EntanglementEntropyExact,
     EntanglementEntropyRenyi2,
     ExpressibilityKL,
@@ -255,6 +261,83 @@ def run_quantum() -> list[ValidationRow]:
     return rows
 
 
+# ---------------------------------------------------------------------------
+# Part I Eq. 10 (C_quant): the six ensemble components, validated *as called*.
+# Ground truths are closed forms; every testbed is built here so the check does
+# not depend on any production dataset.
+# ---------------------------------------------------------------------------
+
+def _product(n: int) -> np.ndarray:
+    v = np.zeros(2 ** n, complex); v[0] = 1.0
+    return v
+
+
+def _ghz(n: int) -> np.ndarray:
+    v = np.zeros(2 ** n, complex); v[0] = v[-1] = 1 / np.sqrt(2)
+    return v
+
+
+def _w(n: int) -> np.ndarray:
+    v = np.zeros(2 ** n, complex)
+    for i in range(n):
+        v[1 << i] = 1 / np.sqrt(n)
+    return v
+
+
+def _t_state() -> np.ndarray:
+    return np.array([1.0, np.exp(1j * np.pi / 4)], complex) / np.sqrt(2)
+
+
+def _bloch(theta: np.ndarray, phi: np.ndarray) -> np.ndarray:
+    return np.stack([np.cos(theta / 2), np.exp(1j * phi) * np.sin(theta / 2)], axis=1)
+
+
+def run_quantum_ensemble() -> list[ValidationRow]:
+    rows: list[ValidationRow] = []
+    n = 8
+    rng = np.random.default_rng(0)
+
+    def add(name: str, metric: BaseMetric, states: np.ndarray, gt: float | None,
+            meta_key: str | None = None) -> None:
+        res = metric.compute(states, ground_truth=gt)
+        rows.append(_row(name, gt, res))
+
+    # 1. mean half-cut entanglement entropy (nats)
+    add(f"ens:product n={n}", EnsembleEntanglement(), _product(n), 0.0)
+    add(f"ens:GHZ n={n}", EnsembleEntanglement(), _ghz(n), float(np.log(2)))
+    # 2. total correlation sum_q S(rho_q) for pure states (nats)
+    add(f"ens:product n={n}", EnsembleTotalCorrelation(), _product(n), 0.0)
+    add(f"ens:GHZ n={n}", EnsembleTotalCorrelation(), _ghz(n), float(n * np.log(2)))
+    # 3. fidelity-Gram effective rank: identical -> 1, orthogonal -> N
+    N = 16
+    add("ens:identical x16", EnsembleKernelEffectiveRank(), np.tile(_product(4), (N, 1)), 1.0)
+    add("ens:basis states x16", EnsembleKernelEffectiveRank(), np.eye(N, dtype=complex), float(N))
+    # 4. stabilizer Renyi-2 magic (bits): stabilizer -> 0, single T state -> log2(4/3)
+    add(f"ens:GHZ n={n}", EnsembleStabilizerMagic(), _ghz(n), 0.0)
+    add("ens:T state", EnsembleStabilizerMagic(), _t_state(), float(np.log2(4 / 3)))
+    # 5. collective-spin QFI / n^2: product -> 1/n, GHZ -> 1, W -> (3n-2)/n^2
+    add(f"ens:product n={n}", EnsembleQFI(), _product(n), 1.0 / n)
+    add(f"ens:GHZ n={n}", EnsembleQFI(), _ghz(n), 1.0)
+    add(f"ens:W n={n}", EnsembleQFI(), _w(n), (3 * n - 2) / n ** 2)
+    # 6. Fubini-Study persistence (pi/2-normalised l2, H0 excluded).
+    #    Ground truth is structural: Betti counts at theta=0.20 and zero for a point.
+    sphere = _bloch(np.arccos(rng.uniform(-1, 1, 200)), rng.uniform(0, 2 * np.pi, 200))
+    equator = _bloch(np.full(120, np.pi / 2), np.linspace(0, 2 * np.pi, 120, endpoint=False))
+    point = np.tile(_product(1), (40, 1))
+    fs = EnsembleFubiniStudyPersistence(maxdim=2)
+    for name, S, b1, b2 in (("ens:Bloch sphere (Haar 1q)", sphere, 0, 1),
+                            ("ens:Bloch equator", equator, 1, 0)):
+        res = fs.compute(S)
+        got = res.metadata["betti_at_theta"]
+        ok = float(got.get(1, 0) == b1 and got.get(2, 0) == b2)
+        rows.append(ValidationRow(testbed=f"{name} betti=({b1},{b2})", metric=res.name,
+                                  estimator="betti@0.20 match", value=ok, uncertainty=None,
+                                  ground_truth=1.0, abs_error=abs(ok - 1.0), rel_error=None,
+                                  elapsed_ms=1000 * res.elapsed_s))
+    add("ens:single state x40", fs, point, 0.0)
+    return rows
+
+
 def format_table(rows: list[ValidationRow]) -> str:
     header = (
         f"{'testbed':38} {'metric':24} {'estimator':22} "
@@ -281,6 +364,11 @@ def main() -> int:
     print("=== quantum ===")
     rows_q = run_quantum()
     print(format_table(rows_q))
+    print()
+    print("=== quantum ensemble (Eq. 10 components) ===")
+    rows_e = run_quantum_ensemble()
+    print(format_table(rows_e))
+    rows_q = rows_q + rows_e
 
     # Summary diagnostics
     print("\n=== exact-vs-proxy summary ===")

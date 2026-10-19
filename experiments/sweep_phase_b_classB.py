@@ -149,7 +149,38 @@ def run_cell(spec, ansatz_name, ansatz, T, seed, n, quantum_model="variational-z
     y_tr, y_te = y[tr], y[te]
 
     # --- quantum model on states ---
-    if quantum_model == "parity-readout":
+    if quantum_model == "designed-readout":
+        # Generalised oracle readout for the structure-search battery. Measures the
+        # ground-truth observable(s) recorded in the probe's metadata -- an arbitrary
+        # Pauli string, not just a Z-parity -- and for the composite family combines
+        # the two eigenvalues by AND, which no single Pauli expectation can express.
+        # This is the upper bound on the quantum side: it establishes that an edge
+        # EXISTS given the right measurement, not that any model finds it.
+        from qmlc.structure_search import _pauli_string_op
+        md = ds.metadata or {}
+        sup = tuple(md.get("support", ())); let = tuple(md.get("paulis", ()))
+        if not sup:
+            a_q = 0.5                                   # null_control: nothing to measure
+        elif md.get("family") == "double_parity":
+            # Use the STORED partition. Splitting the sorted union in half does not
+            # recover (A, B) and yields observables the states are not eigenstates of.
+            parts = md.get("parts") or []
+            if len(parts) == 2:
+                A, B = tuple(parts[0]), tuple(parts[1])
+            else:
+                h = len(sup) // 2; A, B = sup[:h], sup[h:]
+            h = len(A)
+            PA = _pauli_string_op(n, A, ("Z",) * h); PB = _pauli_string_op(n, B, ("Z",) * h)
+            eA = np.real(np.einsum("ij,jk,ik->i", st_te.conj(), PA, st_te))
+            eB = np.real(np.einsum("ij,jk,ik->i", st_te.conj(), PB, st_te))
+            pred_te = ((eA > 0) & (eB > 0)).astype(np.int64)
+            a_q = float(min(np.mean(pred_te != y_te), np.mean(pred_te == y_te)))
+        else:
+            P = _pauli_string_op(n, sup, let)
+            ev = np.real(np.einsum("ij,jk,ik->i", st_te.conj(), P, st_te))
+            pred_te = (ev < 0).astype(np.int64)
+            a_q = float(min(np.mean(pred_te != y_te), np.mean(pred_te == y_te)))
+    elif quantum_model == "parity-readout":
         # Structure-aware Mode-N learner: measure the global parity observable P_w directly
         # (a physically O(1) quantum measurement the shadow-limited classical learner cannot
         # afford). w is taken from the dataset construction — this is the positive-control /
@@ -197,6 +228,10 @@ def run_cell(spec, ansatz_name, ansatz, T, seed, n, quantum_model="variational-z
 def main() -> int:
     p = argparse.ArgumentParser(description="Class B quantum-native runner (prototype)")
     p.add_argument("--datasets", nargs="*", default=None, help="default: all klass B")
+    p.add_argument("--battery", nargs="*", default=None,
+                   help="structure-search battery families (EXPLORATORY): z_parity "
+                        "pauli_stab double_parity null_control")
+    p.add_argument("--battery-weights", nargs="*", type=int, default=[2, 4, 6])
     p.add_argument("--probe-weights", nargs="*", type=int, default=None,
                    help="run the EXPLORATORY shadow-hard parity probe at these weights "
                         "(e.g. 1 2 4 6 8) instead of the registry Class B datasets")
@@ -204,7 +239,8 @@ def main() -> int:
                    help="run PennyLane qspin phase-classification datasets (e.g. Ising Heisenberg)")
     p.add_argument("--ansatze", nargs="*", default=["hea-L3"])
     p.add_argument("--quantum-model", default="variational-z0",
-                   choices=("variational-z0", "parity-readout", "measurement-selection"),
+                   choices=("variational-z0", "parity-readout", "measurement-selection",
+                            "designed-readout"),
                    help="quantum learner: generic variational circuit + Z0 readout; the "
                         "structure-aware global-parity measurement (oracle upper bound); or the "
                         "trainable measurement-selection head that must discover the parity support")
@@ -216,7 +252,12 @@ def main() -> int:
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args()
 
-    if args.probe_weights:
+    if args.battery:
+        from qmlc.datasets import structure_probe_specs
+        specs = {sp.name: sp for sp in structure_probe_specs(
+            families=tuple(args.battery), weights=tuple(args.battery_weights),
+            n_qubits=args.n_qubits)}
+    elif args.probe_weights:
         specs = {s.name: s for s in class_b_probe_specs(weights=args.probe_weights,
                                                         n_qubits=args.n_qubits)}
     elif args.qspin:

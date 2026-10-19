@@ -16,32 +16,18 @@ from __future__ import annotations
 import importlib, json, sys
 from pathlib import Path
 import numpy as np
-from ripser import ripser
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from qmlc.quantum import EnsembleKernelEffectiveRank, EnsembleQFI          # noqa: E402
+from qmlc.quantum import (EnsembleKernelEffectiveRank, EnsembleQFI,         # noqa: E402
+                          EnsembleFubiniStudyPersistence)
 from qmlc.datasets import class_b_probe_specs                              # noqa: E402
 
 FS_MAX = np.pi / 2
 
-def c_top_q(S, maxdim=2, sub=250, seed=0):
-    """Component 6: threshold-free l2 of FS-normalised persistence, H0 excluded."""
-    S = np.asarray(S)
-    S = S / np.linalg.norm(S, axis=1, keepdims=True)
-    if len(S) > sub:
-        S = S[np.random.default_rng(seed).permutation(len(S))[:sub]]
-    dm = np.arccos(np.clip(np.abs(S.conj() @ S.T), 0.0, 1.0))
-    dgms = ripser(dm, distance_matrix=True, maxdim=maxdim, thresh=FS_MAX)['dgms']
-    tot = 0.0
-    for k in range(1, maxdim + 1):
-        d = np.asarray(dgms[k], float)
-        if not len(d):
-            continue
-        dd = d[:, 1].copy(); dd[~np.isfinite(dd)] = FS_MAX
-        L = np.clip(dd - d[:, 0], 0, None) / FS_MAX
-        tot += float((L ** 2).sum())
-    return tot
+def c_top_q(S):
+    """Component 6, now in the library: qmlc.quantum.EnsembleFubiniStudyPersistence."""
+    return EnsembleFubiniStudyPersistence().compute(S).value
 
 CACHED = {"S_ent": "entanglement_entropy_mean", "I_multi": "total_correlation_mean",
           "N_magic": "stabilizer_renyi2_mean"}

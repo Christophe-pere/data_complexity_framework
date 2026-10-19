@@ -503,6 +503,68 @@ class EnsembleKernelEffectiveRank(BaseMetric):
                              "trace": s1, "frob_sq": s2}
 
 
+_FS_MAX = np.pi / 2
+
+
+class EnsembleFubiniStudyPersistence(BaseMetric):
+    """v_topq -- component 6 of Part I Eq. 10, as replaced in Part II.
+
+    Part I's $C_\\mathrm{top}^{(q)} = \\lambda_1 S_\\mathrm{topo} + \\lambda_2\\chi
+    + \\lambda_3\\sum_k\\mathrm{Pers}_k$ is an incoherent three-way sum: topological
+    entanglement entropy is exponential to estimate and needs a 2D lattice the
+    ensembles lack, and the Euler characteristic is a signed integer over an
+    unspecified manifold. Only the persistence term is kept
+    (`docs/class_b_quantum_native_spec.md`, 2026-08-25):
+
+        C_top^(q)(E) = sum_{k>=1} sum_i (l_{k,i} / (pi/2))^2
+
+    with l_{k,i} the Vietoris-Rips persistence lengths of the ensemble under the
+    Fubini-Study metric d(psi, phi) = arccos|<psi|phi>|, H0 excluded, filtration
+    capped at pi/2 and essential bars closed there.
+
+    Normalising by the canonical maximum distance pi/2 (orthogonal states) rather
+    than by the empirical diameter makes the value sample-independent and
+    scale-aware. Caveat to carry wherever it is used: this is topology *weighted by
+    the extent of state space explored*, not a Betti detector -- a small loop scores
+    near zero although it is topologically a circle. The value is threshold-free;
+    `theta` only sets the reported Betti-style counts in the metadata.
+    """
+
+    name = "fubini_study_persistence"
+    estimator = "ripser_fs_pi2"
+
+    def __init__(self, maxdim: int = 2, max_states: int = 250, seed: int = 0,
+                 theta: float = 0.20):
+        self.maxdim = maxdim
+        self.max_states = max_states
+        self.seed = seed
+        self.theta = theta
+
+    def _compute(self, states):
+        from ripser import ripser
+        S, n = _as_state_stack(states)
+        S = S / np.linalg.norm(S, axis=1, keepdims=True)
+        if S.shape[0] > self.max_states:
+            rng = np.random.default_rng(self.seed)
+            S = S[rng.permutation(S.shape[0])[: self.max_states]]
+        dm = np.arccos(np.clip(np.abs(S.conj() @ S.T), 0.0, 1.0))
+        dgms = ripser(dm, distance_matrix=True, maxdim=self.maxdim,
+                      thresh=_FS_MAX)["dgms"]
+        total, betti = 0.0, {}
+        for k in range(1, self.maxdim + 1):
+            d = np.asarray(dgms[k], float)
+            if not len(d):
+                betti[k] = 0
+                continue
+            death = d[:, 1].copy()
+            death[~np.isfinite(death)] = _FS_MAX
+            L = np.clip(death - d[:, 0], 0, None) / _FS_MAX
+            total += float((L ** 2).sum())
+            betti[k] = int((L > self.theta).sum())
+        return total, None, {"n_qubits": n, "n_states": int(S.shape[0]),
+                             "betti_at_theta": betti, "theta": self.theta}
+
+
 class EnsembleMPSBond(_EnsembleMetric):
     """v_bond — mean optimal MPS bond dimension at fixed truncation."""
 
