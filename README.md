@@ -1,85 +1,101 @@
 # Data Complexity Framework
 
-Implementation, specifications and analysis for the **Data Complexity** series on when — and whether — data structure predicts a quantum machine-learning advantage.
+Code for **[Does Data Complexity Predict Quantum Advantage? A framework, a pre-specified test, and an attribution of the measured edge](https://arxiv.org/abs/2509.16410)** (Christophe Pere, arXiv:2509.16410v2, 2026).
 
-- **Part I** (2025), *Data Complexity: a threshold between Classical and Quantum Machine Learning*, [arXiv:2509.16410](https://arxiv.org/abs/2509.16410) — proposes data complexity as the missing axis, with a four-pillar composite measure.
-- **Part II** (in preparation), *what a pre-specified falsification teaches about measuring quantum advantage* — the empirical test. **The central hypothesis is falsified**, and this repository holds everything needed to check that.
+Version 1 of the paper (2025) proposed *data complexity* — the structural, statistical, algorithmic and topological richness of a dataset — as the axis that predicts when quantum machine learning beats classical ML. Version 2 corrects that framework explicitly and then tests its central predictive claim on a pre-specified protocol. **The claim fails**, and the paper's value is in why. Version 1 remains archived and citable on arXiv.
 
-**This repository holds code, specifications and analysis only.** The manuscript is maintained separately and will be linked here once it is on arXiv.
+This repository contains the source code only: the metric library, the experiment runners, the analysis scripts and the frozen dataset registry. Results, specifications and the manuscript are not tracked here (see [Data](#data)).
 
 ## Headline results
 
-| | Outcome |
+The confirmatory study covers 27 datasets × 10 encodings × 6 ansätze × 5 seeds (8,100 runs) on 8-qubit circuits, simulated exactly and noiselessly.
+
+| Hypothesis | Outcome |
 |---|---|
-| **H5** (primary): complexity ranks the budget-matched quantum edge | **Falsified.** Pooled leave-one-dataset-out *R²* = −0.32 against a pre-specified threshold of 0.4, fold-bootstrap CI entirely below it. |
-| **H1**: barren-plateau scaling law | Fails. Pooled LODO *R²* = +0.026 against 0.70. Gradient variance decays as a **power law** in circuit width (≈ *n*⁻²·²), not exponentially. |
-| **H2**: topological contribution | **Inconclusive — the pre-specified test is withdrawn.** The estimator was measuring dispersion and ambient scale, not topology. See below. |
-| **H3**: expressibility–data alignment | Weakest result in the battery; the secondary criterion was lost to a serialisation defect. |
-| **H4**: per-feature encoding optimality | Untested; the precondition is stated in the paper. |
-| **H6**: dequantization-stratified validity | Descriptive by construction — the suite contains no Mode-Q pairs. |
+| **H5** (primary): data complexity predicts the budget-matched quantum edge | **Falsified.** Pooled leave-one-dataset-out *R²* = −0.32 against a pre-specified threshold of 0.4. |
+| **H1**: data-modulated barren-plateau law | **Fails.** Pooled LODO *R²* = +0.026 against 0.70; 2 of 9 complexity components detectable. |
+| **H2**: topological contribution | **Withdrawn.** The pre-specified estimator was defective. Re-runs with the corrected estimator are inconclusive (App. B). |
+| **H3**: expressibility–data alignment | Passes its literal criterion (positive slope, CI excluding zero), but the alignment head has gap *R²* = −0.013. |
+| **H4**: per-feature encoding optimality | Untested (downstream of H5). |
+| **H6**: dequantization-stratified validity | Not evaluable: the suite contains no QRAM-mode cells. |
 
-Three findings survive the null, and are the work's actual contribution:
+What the null teaches:
 
-1. **The classical baseline, not the quantum model, determines measured advantage in the low-signal regime.** Against logistic regression alone the selector predicts the edge (*R²* = +0.13, 17% quantum win rate); against the best of six standard classical models the same pipeline gives *R²* = −0.94 and a 1% win rate.
-2. **The advantage that survives a fair baseline is unreachable by gradient training.** A shadow-hard parity probe yields an edge of +0.42, switching on exactly as the label weight crosses the shadow locality — yet a generic variational circuit sits in a barren plateau, and a trainable measurement-selection head fails beyond parity weight two.
-3. **The revised barren-plateau law is misspecified in the regime experiments can reach.** Ansatz depth contributes nothing detectable, and the fitted decay rate excludes the Haar-random value.
+1. **The classical baseline makes the edge (Sec. 7.2).** Against logistic regression alone, the selector reaches *R²* = +0.13 and the quantum model wins 17% of cells. Against the best of six standard classical models (LR, kNN, RBF-SVC, MLP, HistGBM, RF), *R²* falls to −0.94 and the win rate to 1.1%. Any single non-linear baseline already pushes the win rate below 6%.
+2. **Only a residual is a quantum claim (Props. 1–2).** Any reported gap splits into a preprocessing-attributable term and a residual, and an encoding cannot add label information, *I*(𝓔(*X*); *Y*) ≤ *I*(*X*; *Y*). Classical preprocessing leaves little non-linear headroom on real datasets (Sec. 7.3).
+3. **The regime is pinned (Secs. 7.5, 7.8).** The quantum model sits at or near chance in 81.5% of cells, so the measured edge is driven by the classical term (ρ = +0.913). The encoding axis carries 0.5% of the variance, and widths *n* = 4–10 do not move it.
+4. **An edge can exist and still be unreachable (Sec. 7.12).** A designed weight-*w* parity control yields a +0.42 edge for *w* ≥ 4 under a structure-aware measurement. A hardware-efficient ansatz and a trainable measurement-selection head both stay at chance. A selector trained on gradient-trained outcomes therefore misses exactly the advantages worth having.
 
-## Instrument audit — read this before reusing any metric
+Exploratory: gradient variance decays as a power law, Var[*g*] ∼ *n*⁻²·¹⁵, independent of depth and slower than the Haar-random rate (Sec. 7.6).
 
-Two of Part I's four complexity pillars turned out to be **scale-and-dimension statistics in disguise**:
+## Instrument audit: read this before reusing a metric
 
-- The topological component was defective in four compounding ways: *H*₀ dispersion dominating the value, no scale normalisation, an over-truncated filtration, and an edge-collapse step deleting the essential classes truncation had manufactured. **It returns zero persistence for a clean circle.** It is retained unchanged as `PersistentHomology` so the pre-specified numbers stay reproducible; `NormalisedPersistentHomology` is the corrected, shape-validated replacement.
-- Differential entropy is extensive in dimension and scale-dependent: over the 27-dataset suite *S* ≈ *d*·log(diam) with *R²* = 0.999.
+Two of the v1 complexity components turned out to be scale-and-dimension statistics in disguise:
 
-Consequently Part I's composite *C*_data (Eq. 7) is a **one-pillar quantity wearing a sum**, and which pillar it collapses to depends on an estimator detail: 100% of its variance sits on topology with the deployed estimator, and 100% on entropy once that estimator is repaired. Per-component rank normalisation is what makes the four pillars commensurable — variance shares move from 100/0/0/0 to 25.00/25.00/24.99/25.00.
+- **Topology.** The v1 topological component had four compounding defects (App. B) and returns zero persistence for a clean circle. It is kept unchanged as `PersistentHomology` so the pre-specified numbers stay reproducible. `NormalisedPersistentHomology` is the corrected, shape-validated replacement.
+- **Differential entropy.** It is extensive in dimension and scale-dependent.
 
-The root cause is worth generalising: **the validated configuration was never the deployed one.** The validation suite exercised the estimator with different arguments than production used. Validate metrics *as called*.
+As a result, the v1 composite is effectively a one-component quantity, and which component dominates depends on an estimator detail. Per-component rank normalisation is what makes the components commensurable (Sec. 4). The quantum composite collapses the same way, onto the kernel effective rank.
 
-Full audit in [`docs/deviations_log.md`](docs/deviations_log.md).
+The general lesson: validate metrics **as called**. In v1 the validated configuration was never the deployed one. `python -m qmlc.validate` checks every component, classical and quantum, against closed-form testbeds using the arguments production uses.
 
 ## Layout
 
 ```
-qmlc/            metric library — classical and quantum complexity components,
-                 encodings, ansaetze, predictor, classical shadows, budget model
-experiments/     Phase B/C runners, feature extraction, Class B quantum-native arm
-analysis/        hypothesis tests, figures, tables, instrument audits, ablations
-docs/            framework_v2, encoding and ansatz libraries, deviations log,
-                 Class B specification, Part III design notes
-datasets/        frozen registry v0.5.0-class-abcd-32 (32 datasets, SHA-256 pinned)
-legacy/          the 2025 Part I-era prototype, superseded, kept for provenance
+qmlc/          metric library: classical and quantum complexity components,
+               encodings, ansätze, predictor, classical shadows, budget model,
+               structure-search battery, validation against closed forms
+experiments/   Phase B/C runners, feature extraction, class-B (quantum-native)
+               arm, circuit-width sweeps
+analysis/      hypothesis tests, baseline ladder, attribution and headroom,
+               ablations, table and figure generation
+scripts/       dataset registry builder and taxonomy annotation
+datasets/      registry.json: frozen registry v0.5.0-class-abcd-32
+               (32 datasets, SHA-256 pinned)
+legacy/        the 2025 v1-era prototype, superseded, kept for provenance
 ```
 
 ## Reproducing
 
 ```bash
-python -m qmlc.validate                      # metric library against closed-form testbeds
-bash experiments/run_loop.sh                 # Phase B sweep (resumable)
-bash experiments/run_phase_c.sh              # confirmatory Phase C (per-fold, resumable)
-python -m analysis.h1_h2_analysis            # H1 / H2
-python analysis/h5_topology_ablation.py      # H5 sensitivity to the topology component
+python -m qmlc.validate                       # metric library vs closed-form testbeds
+bash experiments/run_loop.sh                  # Phase B sweep (resumable)
+bash experiments/run_phase_c.sh               # confirmatory Phase C (per fold, resumable)
+python -m analysis.h1_h2_analysis             # H1 / H2
+python analysis/h5_topology_ablation.py       # H5 sensitivity to the topology component
 ```
 
-**Environment.** Python 3.12 with `numpy` 1.26.4, `scipy` 1.13.1, `scikit-learn` 1.6.1, `torch` 2.7.1, `gpytorch` 1.15.2, `lightgbm` 4.6.0, `ripser` 0.6.15, `gudhi`. Quantum simulation is exact state-vector in numpy — **no quantum hardware was used**.
+| Paper section | Script |
+|---|---|
+| Sec. 4, quantum composite collapse | `analysis/cquant_part2.py`, `analysis/cquant_shares.py` |
+| Sec. 7.2, baseline ladder | `analysis/baseline_ladder.py` |
+| Sec. 7.3, reducer cost and headroom | `analysis/make_part2_encoder_tables.py` |
+| Sec. 7.7, refit on the corrected baseline | `analysis/h1_refit_corrected_baseline.py` |
+| Sec. 7.8, width dependence of *a_q*; correlation-dimension check | `experiments/run_aq_width_sweep.sh`, `analysis/aq_width_dependence.py`, `analysis/correlation_dimension.py` |
+| Sec. 7.12, designed quantum-signature control | `experiments/sweep_phase_b_classB.py`, `qmlc/structure_search.py` |
 
-## Data availability
+Analysis scripts read results from `experiments/results/` and some write LaTeX tables to `paper2/tables/`. Neither directory is tracked, so create them locally before running.
 
-The dataset registry was frozen on 2026-06-14; every dataset carries its own SHA-256 and is regenerated deterministically from `datasets/registry.json`.
+**Environment.** Python 3.12 with `numpy` 1.26.4, `scipy` 1.13.1, `scikit-learn` 1.6.1, `torch` 2.7.1, `gpytorch` 1.15.2, `lightgbm` 4.6.0, `ripser` 0.6.15 and `gudhi` (for the pre-specified topological component). Quantum simulation is exact state-vector in `numpy`. **No quantum hardware was used.**
 
-Raw Phase B/C result files (~108 MB) are **not tracked here** and are released separately at publication; `experiments/results/phase_b_classB.jsonl` (the quantum-native arm) is small enough to include. Files with a `_topofix` suffix carry the corrected topological component, retaining the original value in each record as `value_original`. The manuscript is likewise kept out of this repository by design.
+## Data
+
+- **Datasets.** The registry was frozen on 2026-06-14. Every dataset is generated deterministically by `qmlc.datasets` and checked against the SHA-256 recorded in `datasets/registry.json`. `python -m scripts.build_registry` rebuilds and re-screens the registry.
+- **Not tracked here:** raw Phase B/C results, logs, fold outputs, specification documents, the deviations log and the manuscript. The paper is on [arXiv](https://arxiv.org/abs/2509.16410).
 
 ## Provenance, stated precisely
 
-The hypotheses, decision rules, thresholds and cross-validation scheme were fixed in a written, dated specification before any confirmatory analysis was run, and one revision (the classical-baseline definition) was made and logged before the confirmatory run. **No public pre-registration was filed** — the practice is not yet standard in this field. What is externally checkable is the internal record: dated specification entries, the deviations log, and content hashes. This repository's commit history begins at publication and does not itself evidence that ordering. This is the weaker, in-house form and should be read as such.
+The hypotheses, decision rules, thresholds and cross-validation scheme were fixed in a written, dated specification before any confirmatory analysis was run. One revision, the classical-baseline definition, was made and logged before the confirmatory run. **No public pre-registration was filed.** The internal record (dated specification entries, deviations log, content hashes) is the evidence for that ordering. It is not part of this code-only repository, and this repository's commit history does not itself evidence it.
 
 ## Citation
 
 ```bibtex
-@article{pere2025datacomplexity,
-  title   = {Data Complexity: a threshold between Classical and Quantum Machine Learning},
+@article{pere2026datacomplexity,
+  title   = {Does Data Complexity Predict Quantum Advantage? A framework, a pre-specified test, and an attribution of the measured edge},
   author  = {Pere, Christophe},
   journal = {arXiv preprint arXiv:2509.16410},
-  year    = {2025}
+  year    = {2026},
+  note    = {Version 2; supersedes ``Data Complexity: a threshold between Classical and Quantum Machine Learning'' (v1, 2025)}
 }
 ```
 
