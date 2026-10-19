@@ -11,7 +11,7 @@ venv/
 
 # Non-code directories
 docs/
-datasets/
+datasets/*
 paper*/
 geometry/
 qml-extract/
@@ -49,3 +49,6 @@ experiments/results/
 CLAUDE.md
 .DS_Store
 .log
+
+# Exception: the dataset registry lets anyone rebuild the suite deterministically
+!datasets/registry.json
